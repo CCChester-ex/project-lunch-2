@@ -1,5 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
+
+TW_TZ = timezone(timedelta(hours=8))
 
 WEEKDAY_NAMES = {
     1: "週一",
@@ -11,14 +13,18 @@ WEEKDAY_NAMES = {
     7: "週日"
 }
 
+def get_now_taipei() -> datetime:
+    """取得台灣時區 (UTC+8) 的當前時間 (naive datetime)，確保在雲端主機 (Render) 上時間不會慢 8 小時"""
+    return datetime.now(TW_TZ).replace(tzinfo=None)
+
 def get_current_time(simulated_time_str: Optional[str] = None) -> datetime:
-    """取得目前時間（若有設定模擬時間則使用模擬時間）"""
-    if simulated_time_str:
+    """取得目前時間（若有設定模擬時間則使用模擬時間，否則使用台灣時間 UTC+8）"""
+    if simulated_time_str and simulated_time_str.strip():
         try:
-            return datetime.fromisoformat(simulated_time_str)
+            return datetime.fromisoformat(simulated_time_str.strip())
         except Exception:
             pass
-    return datetime.now()
+    return get_now_taipei()
 
 def check_ordering_window(now: Optional[datetime] = None, allow_test_override: bool = False) -> Dict[str, Any]:
     """
@@ -31,7 +37,7 @@ def check_ordering_window(now: Optional[datetime] = None, allow_test_override: b
     - 其餘時間非訂餐時段（如白天 10:00~16:00、週五 10:00 至週日 16:00 週末放假）
     """
     if now is None:
-        now = datetime.now()
+        now = get_now_taipei()
 
     # weekday: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
     weekday = now.weekday()
@@ -152,7 +158,7 @@ def get_active_week_monday(now: Optional[datetime] = None) -> str:
       不再被卡在已經過期的上週（11/02~11/06）。
     """
     if now is None:
-        now = datetime.now()
+        now = get_now_taipei()
 
     weekday = now.weekday()  # 0=Mon, ..., 4=Fri, 5=Sat, 6=Sun
     if weekday == 6:  # 週日 -> 次週一 (明天)

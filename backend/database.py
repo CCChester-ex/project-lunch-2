@@ -117,18 +117,20 @@ def init_db(force_reseed: bool = False):
 
     conn.commit()
 
-    # 舊資料庫自動補上 variant 欄位
+    # 確保既有資料庫補齊 variant 欄位並同步 15 家真實店家完整菜單
     try:
         from .menu_data import ensure_variant_column, apply_real_menus
     except ImportError:
         from menu_data import ensure_variant_column, apply_real_menus
     ensure_variant_column(conn)
 
-    # 檢查是否需要塞入種子資料
     cursor.execute("SELECT COUNT(*) FROM restaurants")
-    if cursor.fetchone()[0] == 0:
+    rest_count = cursor.fetchone()[0]
+    if rest_count == 0:
         seed_comprehensive_data(cursor, conn)
-        apply_real_menus(conn)  # 以真實菜單覆蓋成大館、佳味庭食堂
+        apply_real_menus(conn)
+    elif rest_count < 15:
+        apply_real_menus(conn)
 
     conn.close()
 

@@ -1,7 +1,10 @@
 import random
 from typing import List, Dict, Any, Optional, Tuple
 import sqlite3
-from .database import get_db_connection
+try:
+    from .database import get_db_connection
+except ImportError:
+    from database import get_db_connection
 
 def calculate_restaurant_scores(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     """

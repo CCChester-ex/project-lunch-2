@@ -26,6 +26,7 @@ try:
         check_ordering_window,
         get_week_monday,
         get_active_week_monday,
+        get_now_taipei,
         WEEKDAY_NAMES
     )
 except ImportError:
@@ -46,6 +47,7 @@ except ImportError:
         check_ordering_window,
         get_week_monday,
         get_active_week_monday,
+        get_now_taipei,
         WEEKDAY_NAMES
     )
 
@@ -117,7 +119,7 @@ def ensure_week_schedule(monday_str: str):
 
 def ensure_current_week_schedule():
     """啟動時自動確保作用週與當前曆法週皆已排定（特別處理週日跨週問題）"""
-    now = datetime.now()
+    now = get_now_taipei()
     simulated_time = get_setting("simulated_time", "")
     if simulated_time:
         try:
@@ -141,7 +143,7 @@ def get_order_status():
     test_mode = get_setting("test_mode", "true") == "true"
     simulated_time = get_setting("simulated_time", "")
 
-    now = datetime.now()
+    now = get_now_taipei()
     if simulated_time:
         try:
             now = datetime.fromisoformat(simulated_time)
@@ -214,7 +216,7 @@ def get_current_week_schedule(week_start: Optional[str] = None):
     支援任意週次查詢（如 week_start=2026-11-09）。
     """
     simulated_time = get_setting("simulated_time", "")
-    now = datetime.now()
+    now = get_now_taipei()
     if simulated_time:
         try:
             now = datetime.fromisoformat(simulated_time)
@@ -311,7 +313,7 @@ def place_order(order: OrderCreate):
     """
     test_mode = get_setting("test_mode", "true") == "true"
     simulated_time = get_setting("simulated_time", "")
-    now = datetime.now()
+    now = get_now_taipei()
     if simulated_time:
         try:
             now = datetime.fromisoformat(simulated_time)
@@ -414,7 +416,7 @@ def get_student_order_history(
         # 先查目標用餐日或今日
         test_mode = get_setting("test_mode", "true") == "true"
         simulated_time = get_setting("simulated_time", "")
-        now = datetime.now()
+        now = get_now_taipei()
         if simulated_time:
             try:
                 now = datetime.fromisoformat(simulated_time)
@@ -479,7 +481,7 @@ def get_today_orders(date: Optional[str] = None):
     if not date:
         test_mode = get_setting("test_mode", "true") == "true"
         simulated_time = get_setting("simulated_time", "")
-        now = datetime.now()
+        now = get_now_taipei()
         if simulated_time:
             try:
                 now = datetime.fromisoformat(simulated_time)
@@ -883,7 +885,7 @@ def get_settings():
         "simulated_time": simulated_time,
         "discord_webhook_url": discord_webhook_url,
         "discord_enabled": discord_enabled,
-        "current_server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "current_server_time": get_now_taipei().strftime("%Y-%m-%d %H:%M:%S")
     }
 
 
