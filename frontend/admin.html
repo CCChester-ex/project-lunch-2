@@ -470,7 +470,7 @@
                       @click="openEditClosedDaysModal(r)"
                       class="text-xs text-slate-600 font-bold hover:text-slate-900 underline"
                     >
-                      ⚙️ 設定公休日
+                      ⚙️ 設定分類與公休日
                     </button>
                   </div>
                 </div>
@@ -682,12 +682,14 @@
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">餐飲類型 *</label>
               <select v-model="newRest.category" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs">
-                <option value="便當">便當</option>
                 <option value="便當快炒">便當快炒</option>
+                <option value="熱炒">熱炒</option>
                 <option value="麵食">麵食</option>
-                <option value="日式">日式</option>
-                <option value="韓式">韓式</option>
-                <option value="異國料理">異國料理</option>
+                <option value="牛排">牛排</option>
+                <option value="義式料理">義式料理</option>
+                <option value="日式料理">日式料理</option>
+                <option value="韓式料理">韓式料理</option>
+                <option value="東南亞料理">東南亞料理</option>
                 <option value="健康餐">健康餐</option>
               </select>
             </div>
@@ -750,24 +752,38 @@
       </div>
     </div>
 
-    <!-- 編輯餐廳公休日彈窗 -->
+    <!-- 編輯餐廳分類與公休日彈窗 -->
     <div v-if="showEditClosedModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
       <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-        <h3 class="text-base font-black text-slate-900">設定【{{ editingRest?.name }}】公休日</h3>
-        <p class="text-xs text-slate-500">
-          系統執行「智慧自動排餐」時，將強制避開勾選之公休日。
-        </p>
+        <h3 class="text-base font-black text-slate-900">設定【{{ editingRest?.name }}】分類與公休</h3>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">餐飲類型（用於避免相鄰天同類）</label>
+          <select v-model="editCategory" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold">
+            <option value="便當快炒">便當快炒</option>
+            <option value="熱炒">熱炒</option>
+            <option value="麵食">麵食</option>
+            <option value="牛排">牛排</option>
+            <option value="義式料理">義式料理</option>
+            <option value="日式料理">日式料理</option>
+            <option value="韓式料理">韓式料理</option>
+            <option value="東南亞料理">東南亞料理</option>
+            <option value="健康餐">健康餐</option>
+          </select>
+        </div>
 
-        <div class="flex flex-wrap gap-2 pt-1">
-          <label v-for="d in [1,2,3,4,5,6,7]" :key="d" class="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 bg-slate-50 border rounded-xl cursor-pointer hover:bg-slate-100">
-            <input type="checkbox" :value="d" v-model="editClosedDaysList" class="rounded text-orange-500">
-            <span class="font-bold">{{ ['週一','週二','週三','週四','週五','週六','週日'][d-1] }}</span>
-          </label>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">每週固定公休日（自動排餐將避開）</label>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <label v-for="d in [1,2,3,4,5,6,7]" :key="d" class="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 bg-slate-50 border rounded-xl cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" :value="d" v-model="editClosedDaysList" class="rounded text-orange-500">
+              <span class="font-bold">{{ ['週一','週二','週三','週四','週五','週六','週日'][d-1] }}</span>
+            </label>
+          </div>
         </div>
 
         <div class="pt-3 flex justify-end space-x-2 border-t border-slate-100">
           <button type="button" @click="showEditClosedModal = false" class="px-3.5 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg">取消</button>
-          <button type="button" @click="saveRestaurantClosedDays" class="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg shadow-sm">儲存公休設定</button>
+          <button type="button" @click="saveRestaurantClosedDays" class="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg shadow-sm">儲存設定</button>
         </div>
       </div>
     </div>

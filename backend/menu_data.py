@@ -35,7 +35,7 @@ def same_price(choices, price):
 CHENG_DA_GUAN = {
     "name": "成大館 外帶單",
     "aliases": ["成大館"],
-    "category": "便當快炒",
+    "category": "熱炒",
     "phone": "0931-215876",
     "min_order": 300,
     "image_url": "/static/menus/cheng_da_guan.jpg",
@@ -205,7 +205,7 @@ def item_single(price, desc=""):
 YI_ZHI_CHUAN = {
     "name": "義之饌（西門店）",
     "aliases": ["義之饌 義大利麵/燉飯", "義之饌"],
-    "category": "異國料理",
+    "category": "義式料理",
     "phone": "06-2525900",
     "min_order": 300,
     "image_url": "/static/menus/yi_zhi_chuan.jpg",
@@ -497,7 +497,7 @@ CHANG_RONG = {
 CHAI_YU_CURRY = {
     "name": "柴與咖哩",
     "aliases": ["柴與咖哩專門", "柴與咖哩"],
-    "category": "異國料理",
+    "category": "日式料理",
     "phone": "0902-262-758",
     "min_order": 300,
     "image_url": "/static/menus/chai_yu_curry.jpg",
@@ -663,7 +663,7 @@ ADI_KITCHEN = {
 HONG_LOU = {
     "name": "紅樓小館",
     "aliases": ["紅樓小館", "紅樓"],
-    "category": "便當快炒",
+    "category": "熱炒",
     "phone": "06-2086815",
     "min_order": 300,
     "image_url": "/static/menus/hong_lou.jpg",
@@ -799,7 +799,7 @@ LUNCH_QUEEN_SAUCES = ("義大利肉醬", "奶油培根醬", "咖哩醬")
 LUNCH_QUEEN = {
     "name": "午餐女王",
     "aliases": [],
-    "category": "異國料理",
+    "category": "義式料理",
     "phone": "06-2086955",
     "min_order": 0,
     "closed_days": "7",
@@ -908,7 +908,7 @@ def enjoy_fried_rice(base):
 ENJOY_STEAK = {
     "name": "享受牛排館",
     "aliases": [],
-    "category": "異國料理",
+    "category": "牛排",
     "phone": "06-275-5379",
     "min_order": 0,
     "closed_days": "",
@@ -1011,7 +1011,7 @@ YU_GUOSHAO = {
 ER_LE_DONBURI = {
     "name": "二樂 丼",
     "aliases": ["二樂丼", "二樂 丼（台南成大店）"],
-    "category": "異國料理",
+    "category": "日式料理",
     "phone": "06-209-2596",
     "min_order": 0,
     "closed_days": "",
@@ -1094,7 +1094,7 @@ def xiaohu_noodle_rice(set_price, single_price):
 XIAO_HU_STEAK = {
     "name": "小虎牛排（育樂總店）",
     "aliases": ["小虎牛排"],
-    "category": "異國料理",
+    "category": "牛排",
     "phone": "06-2089510",
     "min_order": 500,
     "closed_days": "7",

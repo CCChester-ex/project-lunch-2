@@ -78,9 +78,10 @@ createApp({
         price: 85
       },
 
-      // 編輯餐廳公休日彈窗
+      // 編輯餐廳分類與公休日彈窗
       showEditClosedModal: false,
       editingRest: null,
+      editCategory: '便當快炒',
       editClosedDaysList: [],
 
       // 新增單一菜色彈窗
@@ -553,6 +554,7 @@ createApp({
 
     openEditClosedDaysModal(rest) {
       this.editingRest = rest;
+      this.editCategory = rest.category || '便當快炒';
       const raw = rest.closed_days || '';
       this.editClosedDaysList = String(raw).replace(/;/g, ',').split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
       this.showEditClosedModal = true;
@@ -567,7 +569,7 @@ createApp({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: this.editingRest.name,
-            category: this.editingRest.category,
+            category: this.editCategory,
             phone: this.editingRest.phone || '',
             min_order: this.editingRest.min_order || 0,
             notes: this.editingRest.notes || '',
@@ -579,10 +581,12 @@ createApp({
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '更新失敗');
 
+        this.editingRest.category = this.editCategory;
         this.editingRest.closed_days = closedStr;
         this.showEditClosedModal = false;
-        alert(`已成功更新【${this.editingRest.name}】公休日為：${this.formatClosedDays(closedStr)}`);
+        alert(`已成功更新【${this.editingRest.name}】分類為「${this.editCategory}」、公休日為：${this.formatClosedDays(closedStr)}`);
         this.fetchRestaurants();
+        this.fetchCurrentSchedule();
       } catch (err) {
         alert(err.message);
       }
