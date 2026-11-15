@@ -1,0 +1,18 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE / OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary scratch files
+scratch_*.py

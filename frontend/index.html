@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高中午餐訂餐系統 - 班級庶務專用</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Vue.js 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <!-- Google Fonts: Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    [v-cloak] { display: none; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+  <div id="app" v-cloak class="flex-1 flex flex-col">
+
+    <!-- 頂端導航列 -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-md shadow-orange-200 font-black text-xl">
+            🍱
+          </div>
+          <div>
+            <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-tight">高中午餐智慧訂餐系統</h1>
+            <p class="text-xs text-slate-500 font-medium">三年二班 庶務股長叫餐專線</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <!-- 查詢個人點餐按鈕 -->
+          <button @click="openMyOrderModal" class="inline-flex items-center space-x-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs sm:text-sm font-semibold rounded-lg transition border border-blue-200">
+            <span>🔍 查我的點餐</span>
+          </button>
+
+          <!-- 回饋評分按鈕 -->
+          <button @click="openFeedbackModal" class="inline-flex items-center space-x-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs sm:text-sm font-semibold rounded-lg transition border border-amber-200">
+            <span>⭐ 我要評分回饋</span>
+          </button>
+
+          <!-- 股長後台連結 -->
+          <a href="/admin" class="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition">
+            <span>🛠️ 庶務股長後台</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+      <!-- 訂餐時段狀態橫幅 -->
+      <div :class="[
+        'rounded-2xl p-5 border shadow-sm transition-all',
+        status.is_open ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border-emerald-200' : 'bg-gradient-to-r from-amber-50 to-rose-50 border-amber-200'
+      ]">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="space-y-1.5">
+            <div class="flex flex-wrap items-center gap-2">
+              <span :class="[
+                'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide uppercase',
+                status.is_open ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white'
+              ]">
+                <span class="w-2 h-2 rounded-full mr-1.5 bg-white animate-pulse"></span>
+                {{ status.is_open ? '現正開放點餐' : '目前非點餐時段' }}
+              </span>
+
+              <span v-if="status.is_test_mode" class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200">
+                🧪 測試模式啟動中
+              </span>
+
+              <span class="text-xs text-slate-500">
+                時段規則：週日~週四 16:00 至隔日 10:00 截止
+              </span>
+            </div>
+
+            <h2 class="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">
+              <span>目標午餐：</span>
+              <span class="text-emerald-700 font-extrabold underline decoration-emerald-300 decoration-4 underline-offset-4">
+                {{ status.target_meal_date || '尚未排定' }} ({{ status.target_day_name || '無' }})
+              </span>
+            </h2>
+
+            <p class="text-xs sm:text-sm text-slate-600">
+              {{ status.message }}
+            </p>
+          </div>
+
+          <!-- 倒數計時區 -->
+          <div class="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-200">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {{ status.is_open ? '距離點餐截止尚有' : '下次開放時間' }}
+            </span>
+            <div class="text-xl sm:text-2xl font-black font-mono text-slate-900 mt-0.5">
+              {{ countdownFormatted }}
+            </div>
+            <span class="text-[11px] text-slate-400 mt-0.5">
+              當前時間：{{ status.current_time }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 今日店家簡介卡片 (含直接查看紙本菜單按鈕) -->
+      <div v-if="todayRestaurant" class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div class="flex flex-wrap items-center gap-2 mb-1.5">
+              <span class="px-2.5 py-0.5 bg-orange-100 text-orange-800 text-xs font-bold rounded-md">
+                {{ todayRestaurant.category }}
+              </span>
+              <div class="flex items-center text-amber-500 text-sm font-bold">
+                <span>★ {{ todayRestaurant.avg_rating }}</span>
+                <span class="text-slate-400 font-normal text-xs ml-1">({{ todayRestaurant.feedback_count }}則同學好評)</span>
+              </div>
+            </div>
+            <h3 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{{ todayRestaurant.name }}</h3>
+            <p class="text-sm text-slate-600 mt-1.5">{{ todayRestaurant.notes }}</p>
+          </div>
+
+          <div class="flex flex-col items-start md:items-end space-y-2">
+            <!-- 關鍵功能：直接從系統查看實體紙本菜單照片 -->
+            <button
+              v-if="todayRestaurant.image_url"
+              @click="showMenuPhotoModal = true"
+              class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-orange-100 transition flex items-center space-x-1.5"
+            >
+              <span>🖼️ 查看原版紙本菜單照</span>
+            </button>
+
+            <div class="text-xs text-slate-500 space-y-0.5 md:text-right">
+              <p><span class="font-semibold text-slate-700">店家電話：</span>{{ todayRestaurant.phone || '無' }}</p>
+              <p><span class="font-semibold text-slate-700">外送低消：</span>滿 ${{ todayRestaurant.min_order }} 免運</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 雙欄架構：左側「菜單瀏覽與分類快速選購」，右側「我的今日點餐清單(購物車)」 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+          <!-- 左側：多品項菜單瀏覽與分類 (專門處理 50~150+ 道菜的店家) -->
+          <div class="lg:col-span-7 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h4 class="text-base font-black text-slate-900 flex items-center">
+                <span class="w-2.5 h-2.5 rounded-full bg-orange-500 mr-2"></span>
+                <span>品項菜單一覽 (共 {{ groupedMenu.length }} 道)</span>
+              </h4>
+
+              <!-- 關鍵字快速篩選搜尋框 (依需求：輸入菜名搜尋點餐) -->
+              <div class="relative w-full sm:w-56">
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  placeholder="搜尋菜名 (如: 牛肉、泡菜)..."
+                  class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+                <span v-if="searchQuery" @click="searchQuery = ''" class="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</span>
+              </div>
+            </div>
+
+            <!-- 系列次分類頁籤 (Category Tabs: 解決百道品項滾動不易的問題) -->
+            <div class="flex space-x-1.5 overflow-x-auto pb-1 text-xs font-bold scrollbar-thin">
+              <button
+                @click="selectedSubCategory = 'ALL'"
+                :class="[
+                  'px-3 py-1.5 rounded-lg whitespace-nowrap transition border',
+                  selectedSubCategory === 'ALL'
+                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                ]"
+              >
+                全部品項 ({{ groupedMenu.length }})
+              </button>
+
+              <button
+                v-for="sub in todayRestaurant.sub_categories"
+                :key="sub"
+                @click="selectedSubCategory = sub"
+                :class="[
+                  'px-3 py-1.5 rounded-lg whitespace-nowrap transition border',
+                  selectedSubCategory === sub
+                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                ]"
+              >
+                {{ sub }} ({{ countSubCategoryItems(sub) }})
+              </button>
+            </div>
+
+            <!-- 菜色列表卡片網格（同名菜色合併，規格按鈕直接加點） -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
+              <div
+                v-for="dish in displayedDishes"
+                :key="dish.key"
+                class="bg-slate-50 hover:bg-orange-50/50 rounded-xl p-3 border border-slate-200 hover:border-orange-300 transition flex flex-col justify-between gap-2"
+              >
+                <div>
+                  <div class="flex items-center justify-between gap-2">
+                    <h5 class="font-bold text-sm text-slate-800 leading-snug">{{ dish.name }}</h5>
+                    <span class="font-extrabold text-orange-600 text-sm whitespace-nowrap">{{ dish.priceLabel }}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400 mt-0.5">
+                    <span>{{ dish.sub_category }}</span>
+                    <span v-if="dish.description"> · {{ dish.description }}</span>
+                  </p>
+                </div>
+
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    v-for="v in dish.variants"
+                    :key="v.id"
+                    type="button"
+                    @click="addToCart(dish, v)"
+                    class="px-2.5 py-1 bg-white hover:bg-orange-500 hover:text-white text-slate-700 border border-slate-300 hover:border-orange-500 rounded-lg text-xs font-bold transition"
+                  >
+                    + {{ v.variant || '加點' }}<span v-if="dish.variants.length > 1 && !dish.samePrice" class="opacity-70 ml-1">${{ v.price }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="displayedDishes.length === 0" class="col-span-2 py-10 text-center text-slate-400 text-xs">
+                找不到符合「{{ searchQuery }}」的菜色，您可以在右側手動自訂菜名點餐！
+              </div>
+            </div>
+
+            <!-- 自由輸入菜名補齊工具（完全符合需求3：輸入菜名方式點餐） -->
+            <div class="bg-amber-50/60 rounded-xl p-3 border border-amber-200/80 text-xs space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-amber-900">✍️ 找不到特定組合？直接輸入自訂菜名加入：</span>
+              </div>
+              <div class="flex space-x-2">
+                <input
+                  v-model="customDish.name"
+                  type="text"
+                  placeholder="輸入菜名 (如: 茄汁培根焗烤飯)"
+                  class="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                >
+                <input
+                  v-model.number="customDish.price"
+                  type="number"
+                  placeholder="單價"
+                  class="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                >
+                <button
+                  type="button"
+                  @click="addCustomDishToCart"
+                  class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition"
+                >
+                  + 加入清單
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右側：同學點餐清單 (購物車機制：滿足食量大自選訂幾項) -->
+          <div class="lg:col-span-5 bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+            <div>
+              <h4 class="text-base font-black text-slate-900 flex items-center justify-between">
+                <span class="flex items-center">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2"></span>
+                  我的今日點餐清單
+                </span>
+                <span class="text-xs font-bold text-orange-600 font-mono">
+                  已選 {{ cartItems.length }} 項 ({{ totalCartQuantity }}份)
+                </span>
+              </h4>
+              <p class="text-xs text-slate-500 mt-0.5">食量大可自選多項（主餐＋湯品＋小菜），一鍵合併送出！</p>
+            </div>
+
+            <!-- 基本資料 (座號與姓名) -->
+            <div class="grid grid-cols-2 gap-2.5 pt-1">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">座號 *</label>
+                <input
+                  v-model="studentInfo.seat_number"
+                  type="text"
+                  placeholder="例：05"
+                  required
+                  class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">姓名 *</label>
+                <input
+                  v-model="studentInfo.student_name"
+                  type="text"
+                  placeholder="例：林小華"
+                  required
+                  class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+              </div>
+            </div>
+
+            <!-- 點餐清單項目 (可自由增減、客製各品項備註如加飯/飯多/去蔥) -->
+            <div class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              <div
+                v-for="(item, idx) in cartItems"
+                :key="idx"
+                class="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs space-y-2"
+              >
+                <div class="flex items-center justify-between">
+                  <div class="pr-2 flex-1">
+                    <p class="font-bold text-xs text-slate-800">{{ item.dish_name }}</p>
+                    <span class="text-[11px] font-mono text-orange-600 font-bold">${{ item.price }} / 份</span>
+                  </div>
+
+                  <div class="flex items-center space-x-1.5">
+                    <!-- 數量增減按鈕 -->
+                    <button
+                      type="button"
+                      @click="decreaseQty(idx)"
+                      class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+                    >-</button>
+                    <span class="w-6 text-center font-bold text-xs font-mono">{{ item.quantity }}</span>
+                    <button
+                      type="button"
+                      @click="item.quantity++"
+                      class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+                    >+</button>
+                    <button
+                      type="button"
+                      @click="removeFromCart(idx)"
+                      class="ml-2 text-slate-300 hover:text-rose-500 font-bold text-sm"
+                    >×</button>
+                  </div>
+                </div>
+
+                <!-- 單項專屬客製化備註 (如：飯多、加焗烤、加辣) -->
+                <div>
+                  <input
+                    v-model="item.notes"
+                    type="text"
+                    placeholder="個別備註 (如：飯多、加麵、去蔥、小辣...)"
+                    class="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 focus:outline-none focus:bg-white"
+                  >
+                </div>
+              </div>
+
+              <div v-if="cartItems.length === 0" class="py-10 text-center bg-white rounded-xl border border-dashed border-slate-300">
+                <span class="text-3xl block mb-1">🛒</span>
+                <p class="text-xs font-semibold text-slate-500">點餐清單目前是空的</p>
+                <p class="text-[11px] text-slate-400 mt-0.5">請從左側點選「+ 加點」加入喜愛的餐點</p>
+              </div>
+            </div>
+
+            <!-- 合計總額與送出按鈕 -->
+            <div class="pt-3 border-t border-slate-200 space-y-3">
+              <div class="flex items-center justify-between text-xs text-slate-600">
+                <span>點餐總額合計：</span>
+                <span class="text-2xl font-black text-orange-600 font-mono">${{ totalCartAmount }} 元</span>
+              </div>
+
+              <button
+                type="button"
+                @click="submitOrderCart"
+                :disabled="isSubmitting || !status.is_open || cartItems.length === 0"
+                :class="[
+                  'w-full py-3 rounded-xl font-bold text-sm shadow-md transition flex items-center justify-center space-x-2',
+                  status.is_open && cartItems.length > 0
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-200'
+                    : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                ]"
+              >
+                <span>🍱 送出今日點餐 (共 {{ totalCartQuantity }} 份)</span>
+                <span v-if="isSubmitting">處理中...</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 若今日尚未排餐的提示 -->
+      <div v-else class="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+        <p class="text-slate-500 text-base font-semibold">目標用餐日尚未排定餐廳，請庶務股長至後台執行「智慧自動排餐」！</p>
+        <a href="/admin" class="inline-block mt-3 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg">前往股長後台排餐</a>
+      </div>
+
+      <!-- 今日全班訂餐進度與明細 -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+          <div>
+            <h3 class="text-lg font-black text-slate-900">今日全班訂餐進度與叫餐總攬</h3>
+            <p class="text-xs text-slate-500">已自動彙總每道菜總數量，方便電話叫餐與座號收費</p>
+          </div>
+
+          <!-- 統計小方塊 -->
+          <div class="flex items-center space-x-2">
+            <div class="px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-center">
+              <span class="text-[10px] text-slate-400 block font-semibold">總訂購份數</span>
+              <span class="text-sm font-black text-slate-800 font-mono">{{ todayOrders.total_qty }} 份</span>
+            </div>
+            <div class="px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-200 text-center">
+              <span class="text-[10px] text-orange-600 block font-semibold">訂單總金額</span>
+              <span class="text-sm font-black text-orange-700 font-mono">${{ todayOrders.total_amount }}</span>
+            </div>
+            <div class="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200 text-center">
+              <span class="text-[10px] text-emerald-600 block font-semibold">已繳費人數</span>
+              <span class="text-sm font-black text-emerald-700 font-mono">{{ todayOrders.paid_count }} / {{ todayOrders.total_students }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 菜色統計摘要 (方便電話直接報餐) -->
+        <div v-if="todayOrders.dish_summary && todayOrders.dish_summary.length > 0" class="mb-5 bg-amber-50/60 rounded-xl p-3 border border-amber-200/80">
+          <p class="text-xs font-bold text-amber-900 mb-2">📋 各菜色訂購總計 (叫餐清單)：</p>
+          <div class="flex flex-wrap gap-2">
+            <span
+              v-for="item in todayOrders.dish_summary"
+              :key="item.dish_name"
+              class="px-2.5 py-1 bg-white text-slate-800 rounded-md text-xs font-semibold border border-amber-200 shadow-2xs"
+            >
+              {{ item.dish_name }} <span class="text-orange-600 font-bold">x {{ item.total_qty }} 份</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- 同學點餐明細清單 (依座號姓名彙整) -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                <th class="py-2.5 px-3">座號</th>
+                <th class="py-2.5 px-3">姓名</th>
+                <th class="py-2.5 px-3">點購品項與數量</th>
+                <th class="py-2.5 px-3">應繳總額</th>
+                <th class="py-2.5 px-3">繳費狀態</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="st in todayOrders.student_orders" :key="st.seat_number + st.student_name" class="hover:bg-slate-50/80 transition">
+                <td class="py-2.5 px-3 font-mono font-bold text-slate-700">{{ st.seat_number }}</td>
+                <td class="py-2.5 px-3 font-semibold text-slate-800">{{ st.student_name }}</td>
+                <td class="py-2.5 px-3">
+                  <div class="space-y-1">
+                    <div v-for="it in st.items" :key="it.id" class="text-xs">
+                      <span class="font-bold text-slate-900">{{ it.dish_name }}</span>
+                      <span class="text-orange-600 font-mono font-semibold ml-1">x {{ it.quantity }}</span>
+                      <span class="text-slate-400 ml-1">(${{ it.price * it.quantity }})</span>
+                      <span v-if="it.notes" class="ml-2 text-[11px] text-amber-700 bg-amber-50 px-1 rounded border border-amber-200">
+                        {{ it.notes }}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+                <td class="py-2.5 px-3 font-mono font-bold text-orange-600">${{ st.total_price }}</td>
+                <td class="py-2.5 px-3">
+                  <span :class="[
+                    'px-2 py-0.5 rounded text-[11px] font-bold',
+                    st.is_paid ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                  ]">
+                    {{ st.is_paid ? '✓ 已繳費' : '待繳費' }}
+                  </span>
+                </td>
+              </tr>
+              <tr v-if="!todayOrders.student_orders || todayOrders.student_orders.length === 0">
+                <td colspan="5" class="py-8 text-center text-slate-400">
+                  尚無同學點餐，歡迎在上方將餐點加入清單後送出！
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 本週午餐排程預覽 (週一至週五) -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-base font-black text-slate-900">每週午餐排程預覽 (週一至週五)</h3>
+              <span v-if="weeklySchedule.is_active_week" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full">
+                當前訂餐週
+              </span>
+              <span v-else class="px-2 py-0.5 bg-slate-100 text-slate-600 text-[11px] font-bold rounded-full">
+                其他週次
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">由智慧演算法自動排定（同週不重複、同類不連續），讓每天都能換口味！</p>
+          </div>
+
+          <!-- 週次切換導航按鈕 -->
+          <div class="flex items-center space-x-2">
+            <button
+              type="button"
+              @click="fetchWeeklySchedule(weeklySchedule.prev_week_monday)"
+              class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+            >
+              <span>◀ 上一週</span>
+            </button>
+            <span class="text-xs font-bold text-slate-800 font-mono">
+              {{ weeklySchedule.week_start_date }} ~ {{ weeklySchedule.days?.[4]?.target_date || '' }}
+            </span>
+            <button
+              type="button"
+              @click="fetchWeeklySchedule(weeklySchedule.next_week_monday)"
+              class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+            >
+              <span>下一週 ▶</span>
+            </button>
+            <button
+              v-if="!weeklySchedule.is_active_week"
+              type="button"
+              @click="fetchWeeklySchedule()"
+              class="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-lg text-xs font-bold transition"
+            >
+              回當前週
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+          <div
+            v-for="day in weeklySchedule.days"
+            :key="day.day_of_week"
+            :class="[
+              'p-3.5 rounded-xl border text-center transition',
+              day.target_date === status.target_meal_date
+                ? 'border-orange-400 bg-orange-50/50 ring-2 ring-orange-200'
+                : 'border-slate-200 bg-slate-50'
+            ]"
+          >
+            <div class="text-xs font-bold text-slate-500 mb-1">
+              {{ day.day_name }}
+              <span class="text-[10px] font-normal block text-slate-400">{{ day.target_date }}</span>
+            </div>
+            <div class="my-1.5">
+              <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200">
+                {{ day.category || '未排' }}
+              </span>
+            </div>
+            <p class="font-extrabold text-sm text-slate-800 truncate" :title="day.restaurant_name">
+              {{ day.restaurant_name }}
+            </p>
+            <div class="text-[11px] text-amber-500 font-semibold mt-1">
+              ★ {{ day.avg_rating }}
+            </div>
+            <button
+              v-if="day.image_url"
+              @click="previewSpecificMenuPhoto(day.image_url, day.restaurant_name)"
+              class="mt-2 text-[10px] text-orange-600 hover:text-orange-700 font-bold block w-full underline decoration-orange-300"
+            >
+              查看菜單照 🖼️
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- 實體菜單圖片燈箱彈窗 (Lightbox Modal) -->
+    <div v-if="showMenuPhotoModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 z-50">
+      <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-700 overflow-hidden">
+        <div class="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="text-lg">🖼️</span>
+            <span class="font-bold text-sm sm:text-base">{{ previewTitle || todayRestaurant?.name }} - 實體紙本菜單照</span>
+          </div>
+          <button @click="showMenuPhotoModal = false" class="text-slate-400 hover:text-white font-bold text-lg px-2">✕</button>
+        </div>
+
+        <div class="flex-1 overflow-auto p-4 bg-slate-100 flex items-center justify-center">
+          <img
+            :src="previewImageUrl || todayRestaurant?.image_url"
+            alt="實體菜單照"
+            class="max-w-full max-h-[75vh] object-contain rounded-lg shadow-md border border-slate-300"
+          >
+        </div>
+
+        <div class="px-5 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <span>提示：可自由放大縮小查看店家完整菜單、加飯加麵說明與配料表</span>
+          <a :href="previewImageUrl || todayRestaurant?.image_url" target="_blank" class="px-3 py-1 bg-slate-900 text-white rounded-md font-semibold">
+            新分頁開啟大圖
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 個人點餐紀錄查詢彈窗 (My Orders Modal) -->
+    <div v-if="showMyOrderModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div class="flex items-center space-x-2">
+            <span class="text-xl">🔍</span>
+            <h3 class="text-lg font-black text-slate-900">查詢我的點餐紀錄</h3>
+          </div>
+          <button @click="showMyOrderModal = false" class="text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
+        </div>
+
+        <div class="flex gap-2">
+          <input
+            v-model="myOrderSeatInput"
+            @keyup.enter="searchMyOrders"
+            type="text"
+            placeholder="請輸入座號 (例：05)"
+            class="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+          <button
+            @click="searchMyOrders"
+            :disabled="isSearchingMyOrder"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+          >
+            {{ isSearchingMyOrder ? '查詢中...' : '查詢' }}
+          </button>
+        </div>
+
+        <!-- 查詢結果 -->
+        <div v-if="myOrderResult" class="space-y-3 pt-1">
+          <div v-if="myOrderResult.found" class="bg-blue-50/60 rounded-xl p-4 border border-blue-100 space-y-3">
+            <div class="flex items-center justify-between border-b border-blue-100 pb-2">
+              <div>
+                <span class="text-base font-extrabold text-slate-900">{{ myOrderResult.seat_number }} 號 {{ myOrderResult.student_name }}</span>
+                <span class="text-xs text-slate-500 block">供餐日期：{{ myOrderResult.order_date }}</span>
+              </div>
+              <span :class="[
+                'px-2.5 py-1 rounded-full text-xs font-black shadow-xs',
+                myOrderResult.is_paid ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-700 border border-rose-300'
+              ]">
+                {{ myOrderResult.is_paid ? '✓ 已繳費' : '⚠️ 尚未繳費' }}
+              </span>
+            </div>
+
+            <!-- 餐點明細 -->
+            <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div
+                v-for="item in myOrderResult.items"
+                :key="item.id"
+                class="flex items-center justify-between text-xs py-1 px-2 bg-white rounded-lg border border-blue-100/80"
+              >
+                <div>
+                  <span class="font-bold text-slate-800">{{ item.dish_name }}</span>
+                  <span v-if="item.notes" class="text-[10px] text-slate-400 block">備註：{{ item.notes }}</span>
+                </div>
+                <div class="text-right">
+                  <span class="text-slate-500">{{ item.quantity }} 份 × ${{ item.price }}</span>
+                  <span class="font-bold text-slate-800 block">${{ item.quantity * item.price }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 總計 -->
+            <div class="flex items-center justify-between pt-2 border-t border-blue-200/60 font-extrabold text-sm">
+              <span class="text-slate-600">共 {{ myOrderResult.total_qty }} 份餐點</span>
+              <span class="text-orange-600 text-base">應付總額：${{ myOrderResult.total_amount }}</span>
+            </div>
+          </div>
+
+          <div v-else class="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+            <p class="text-sm font-bold text-slate-600">查無座號 {{ myOrderSeatInput }} 號之今日點餐紀錄</p>
+            <p class="text-xs text-slate-400 mt-1">若尚未點餐，請把握時段於本頁挑選菜色送出！</p>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button @click="showMyOrderModal = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition">
+            關閉視窗
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 同學回饋彈窗 -->
+    <div v-if="showFeedbackModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <h3 class="text-lg font-black text-slate-900">⭐ 填寫午餐回饋與評分</h3>
+          <button @click="showFeedbackModal = false" class="text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
+        </div>
+
+        <p class="text-xs text-slate-500">
+          您的回饋與評分將直接作為系統「下週自動排餐」的重要參考數據！
+        </p>
+
+        <form @submit.prevent="submitFeedback" class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">評價店家 *</label>
+            <select v-model="feedbackForm.restaurant_id" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold">
+              <option v-for="r in allRestaurants" :key="r.id" :value="r.id">
+                {{ r.name }} ({{ r.category }})
+              </option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">座號</label>
+              <input v-model="feedbackForm.seat_number" type="text" placeholder="例：05" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">姓名</label>
+              <input v-model="feedbackForm.student_name" type="text" placeholder="例：林小華" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">總體評分 (1~5 星) *</label>
+            <div class="flex items-center space-x-2 text-2xl cursor-pointer">
+              <span
+                v-for="star in 5"
+                :key="star"
+                @click="feedbackForm.rating = star"
+                :class="star <= feedbackForm.rating ? 'text-amber-400' : 'text-slate-200'"
+              >
+                ★
+              </span>
+              <span class="text-xs text-slate-500 ml-2 font-bold">{{ feedbackForm.rating }} 顆星</span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">快速標籤 (點選加入)</label>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="tag in quickTags"
+                :key="tag"
+                type="button"
+                @click="toggleTag(tag)"
+                :class="[
+                  'px-2.5 py-1 rounded-md text-xs font-semibold transition border',
+                  feedbackForm.selectedTags.includes(tag)
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                ]"
+              >
+                {{ tag }}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">詳細心得或建議</label>
+            <textarea
+              v-model="feedbackForm.comment"
+              rows="2"
+              placeholder="如：炒飯粒粒分明、份量超大吃很飽、送餐很準時..."
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+            ></textarea>
+          </div>
+
+          <div class="pt-2 flex justify-end space-x-2">
+            <button type="button" @click="showFeedbackModal = false" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg">
+              取消
+            </button>
+            <button type="submit" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-sm">
+              送出回饋
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 頁尾 -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+      高中午餐智慧訂餐系統 &copy; 2026 · 設計給班級庶務股長的高效叫餐利器
+    </footer>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
