@@ -38,9 +38,10 @@ if %ERRORLEVEL% NEQ 0 (
     git config user.email "CCChester-ex@users.noreply.github.com"
 )
 
-echo [2/4] 正在打包專案檔案 (排除 venv 虛擬環境)...
+echo [2/4] 正在打包專案檔案 (排除 venv 與本地資料庫個資)...
+git rm --cached data/lunch.db >nul 2>&1
 git add .
-git commit -m "feat: 高中庶務股長智慧訂餐系統 (內建15家真實店家菜單、公休日迴避與個人訂單查詢)"
+git commit -m "feat: 升級後台 HMAC 權杖驗證、防暴力破解與支援 Neon PostgreSQL 永久資料庫"
 
 echo [3/4] 正在綁定遠端儲存庫 https://github.com/CCChester-ex/project-lunch.git ...
 git branch -M main

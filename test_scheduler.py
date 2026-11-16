@@ -113,5 +113,24 @@ class TestSchedulerAndWindow(unittest.TestCase):
         res = check_ordering_window(fri_night)
         self.assertFalse(res["is_open"])
 
+    def test_admin_hmac_token_and_route_security(self):
+        from backend.main import create_admin_token, verify_admin_token, require_admin
+        from fastapi import HTTPException
+
+        # 1. 未帶 Authorization header 時應拋出 401
+        with self.assertRaises(HTTPException) as ctx1:
+            require_admin(None)
+        self.assertEqual(ctx1.exception.status_code, 401)
+
+        # 2. 偽造的 Bearer token 應拋出 401
+        with self.assertRaises(HTTPException) as ctx2:
+            require_admin("Bearer fake.token.sig")
+        self.assertEqual(ctx2.exception.status_code, 401)
+
+        # 3. 合法簽發的 HMAC token 應通過驗證
+        valid_token = create_admin_token()
+        self.assertTrue(verify_admin_token(valid_token))
+        self.assertTrue(require_admin(f"Bearer {valid_token}"))
+
 if __name__ == "__main__":
     unittest.main()

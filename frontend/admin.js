@@ -47,9 +47,11 @@ createApp({
         current_server_time: ''
       },
 
-      // 密碼登入驗證 (預設: 66776677)
-      isAuthenticated: sessionStorage.getItem('admin_authenticated') === 'true',
+      // 後台 HMAC 權杖驗證
+      adminToken: sessionStorage.getItem('admin_token') || '',
+      isAuthenticated: !!sessionStorage.getItem('admin_token'),
       inputPin: '',
+      newAdminPin: '',
       pinError: '',
       isCheckingPin: false,
       isTestingDiscord: false,
@@ -133,6 +135,18 @@ createApp({
     }
   },
   methods: {
+    async adminFetch(url, options = {}) {
+      const headers = Object.assign({}, options.headers || {});
+      if (this.adminToken) {
+        headers['Authorization'] = `Bearer ${this.adminToken}`;
+      }
+      const res = await fetch(url, Object.assign({}, options, { headers }));
+      if (res.status === 401) {
+        this.logout();
+        this.pinError = '登入時效已過期或未授權，請重新輸入管理員密碼！';
+      }
+      return res;
+    },
     async verifyPin() {
       this.isCheckingPin = true;
       this.pinError = '';
@@ -145,8 +159,10 @@ createApp({
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '密碼錯誤！');
 
+        this.adminToken = data.token;
         this.isAuthenticated = true;
-        sessionStorage.setItem('admin_authenticated', 'true');
+        sessionStorage.setItem('admin_token', data.token);
+        sessionStorage.removeItem('admin_authenticated');
         this.inputPin = '';
         this.initAdminData();
       } catch (err) {
@@ -157,7 +173,9 @@ createApp({
       }
     },
     logout() {
+      this.adminToken = '';
       this.isAuthenticated = false;
+      sessionStorage.removeItem('admin_token');
       sessionStorage.removeItem('admin_authenticated');
       this.inputPin = '';
       this.pinError = '';
@@ -183,7 +201,7 @@ createApp({
       }
       this.isTestingDiscord = true;
       try {
-        const res = await fetch('/api/admin/discord/test', {
+        const res = await this.adminFetch('/api/admin/discord/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ webhook_url: this.settings.discord_webhook_url })
@@ -199,7 +217,7 @@ createApp({
     },
     async saveDiscordSettings() {
       try {
-        const res = await fetch('/api/admin/settings', {
+        const res = await this.adminFetch('/api/admin/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -208,14 +226,35 @@ createApp({
           })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '儲存失敗');
         alert('✓ Discord 班群提醒設定已儲存！');
       } catch (err) {
         alert('儲存失敗: ' + err.message);
       }
     },
+    async changeAdminPin() {
+      if (!this.newAdminPin || this.newAdminPin.length < 6) {
+        alert('新密碼請至少輸入 6 碼以上！');
+        return;
+      }
+      try {
+        const res = await this.adminFetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_admin_pin: this.newAdminPin })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '更新密碼失敗');
+        this.newAdminPin = '';
+        alert('✓ 後台管理員密碼已成功更新！下次登入請使用新密碼。');
+      } catch (err) {
+        alert(err.message);
+      }
+    },
     async fetchSettings(silent = false) {
       try {
-        const res = await fetch('/api/admin/settings');
+        const res = await this.adminFetch('/api/admin/settings');
+        if (!res.ok) return;
         const data = await res.json();
         this.settings = data;
         this.serverTime = data.current_server_time;
@@ -225,7 +264,8 @@ createApp({
     },
     async fetchRestaurants() {
       try {
-        const res = await fetch('/api/admin/restaurants');
+        const res = await this.adminFetch('/api/admin/restaurants');
+        if (!res.ok) return;
         const data = await res.json();
         this.allRestaurants = data;
       } catch (err) {
@@ -258,7 +298,8 @@ createApp({
     },
     async fetchFeedbacks() {
       try {
-        const res = await fetch('/api/admin/feedbacks');
+        const res = await this.adminFetch('/api/admin/feedbacks');
+        if (!res.ok) return;
         const data = await res.json();
         this.feedbacks = data;
       } catch (err) {
@@ -270,7 +311,7 @@ createApp({
     async triggerAutoPlan() {
       this.isGenerating = true;
       try {
-        const res = await fetch('/api/admin/schedule/auto-plan', {
+        const res = await this.adminFetch('/api/admin/schedule/auto-plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ week_start_date: this.scheduleWeekStart })
@@ -365,7 +406,7 @@ createApp({
 
       this.isSaving = true;
       try {
-        const res = await fetch('/api/admin/schedule/save', {
+        const res = await this.adminFetch('/api/admin/schedule/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -397,7 +438,7 @@ createApp({
     async toggleStudentPayment(student) {
       const nextPaid = student.is_paid === 1 ? 0 : 1;
       try {
-        const res = await fetch('/api/admin/orders/student-payment', {
+        const res = await this.adminFetch('/api/admin/orders/student-payment', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -419,7 +460,7 @@ createApp({
     async batchSetPayment(paid) {
       if (!confirm(`確定要將今日所有同學皆設為【${paid ? '已收費' : '未收費'}】嗎？`)) return;
       try {
-        const res = await fetch('/api/admin/orders/batch-payment', {
+        const res = await this.adminFetch('/api/admin/orders/batch-payment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -445,7 +486,7 @@ createApp({
       if (!confirm(`確定要取消座號 ${student.seat_number} 號 ${student.student_name} 的全部點餐嗎？`)) return;
       try {
         for (const orderId of student.order_ids) {
-          await fetch(`/api/admin/orders/${orderId}`, { method: 'DELETE' });
+          await this.adminFetch(`/api/admin/orders/${orderId}`, { method: 'DELETE' });
         }
         this.fetchTodayOrders();
       } catch (err) {
@@ -475,7 +516,7 @@ createApp({
     async createRestaurant() {
       try {
         this.newRest.closed_days = this.newRestClosedDaysList.sort().join(',');
-        const res = await fetch('/api/admin/restaurants', {
+        const res = await this.adminFetch('/api/admin/restaurants', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.newRest)
@@ -496,7 +537,7 @@ createApp({
     async deleteRestaurant(restId) {
       if (!confirm('確定要刪除此餐廳嗎？')) return;
       try {
-        const res = await fetch(`/api/admin/restaurants/${restId}`, { method: 'DELETE' });
+        const res = await this.adminFetch(`/api/admin/restaurants/${restId}`, { method: 'DELETE' });
         if (res.ok) {
           this.fetchRestaurants();
           this.fetchCurrentSchedule();
@@ -515,7 +556,7 @@ createApp({
     async submitAddSingleDish() {
       if (!this.targetRestForDish) return;
       try {
-        const res = await fetch(`/api/admin/restaurants/${this.targetRestForDish.id}/menu`, {
+        const res = await this.adminFetch(`/api/admin/restaurants/${this.targetRestForDish.id}/menu`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.singleDish)
@@ -534,7 +575,7 @@ createApp({
     async deleteMenuItem(itemId) {
       if (!confirm('確定要刪除這道菜嗎？')) return;
       try {
-        const res = await fetch(`/api/admin/menu/${itemId}`, { method: 'DELETE' });
+        const res = await this.adminFetch(`/api/admin/menu/${itemId}`, { method: 'DELETE' });
         if (res.ok) {
           this.fetchRestaurants();
         }
@@ -564,7 +605,7 @@ createApp({
       if (!this.editingRest) return;
       const closedStr = this.editClosedDaysList.sort().join(',');
       try {
-        const res = await fetch(`/api/admin/restaurants/${this.editingRest.id}`, {
+        const res = await this.adminFetch(`/api/admin/restaurants/${this.editingRest.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -595,7 +636,7 @@ createApp({
     // 系統與時段測試設定
     async saveSettings() {
       try {
-        await fetch('/api/admin/settings', {
+        await this.adminFetch('/api/admin/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.settings)

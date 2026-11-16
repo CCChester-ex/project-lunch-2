@@ -41,8 +41,8 @@
                 ref="pinInput"
                 v-model="inputPin"
                 type="password"
-                maxlength="20"
-                placeholder="請輸入密碼 (8碼數字)"
+                maxlength="32"
+                placeholder="請輸入管理員通行密碼"
                 required
                 autofocus
                 class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-center text-xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition"
@@ -643,6 +643,36 @@
                   💾 儲存 Webhook 設定
                 </button>
               </div>
+            </div>
+          </div>
+
+          <!-- 後台管理員密碼變更設定 -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+            <div class="flex items-center space-x-2">
+              <span class="text-xl">🔐</span>
+              <div>
+                <h3 class="text-base font-black text-slate-900">後台通行密碼變更與資安設定</h3>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  可在此直接更換庶務股長後台登入密碼（至少 6 碼），或在 Render 環境變數設定 <code class="px-1 py-0.5 bg-slate-100 rounded font-mono">ADMIN_PIN</code>。所有後台 API 均已啟用伺服器端 HMAC 權杖驗證與防暴力破解鎖定（連續輸錯 5 次鎖定 10 分鐘）。
+                </p>
+              </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t border-slate-100">
+              <input
+                v-model="newAdminPin"
+                type="password"
+                placeholder="輸入新後台管理密碼（至少 6 碼，建議英數混合）"
+                class="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono"
+              >
+              <button
+                type="button"
+                @click="changeAdminPin"
+                :disabled="!newAdminPin || newAdminPin.length < 6"
+                class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+              >
+                🔑 更新後台密碼
+              </button>
             </div>
           </div>
         </div>

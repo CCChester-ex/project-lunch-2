@@ -1,9 +1,13 @@
 import os
+import hmac
+import hashlib
+import secrets
+import time
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi import FastAPI, HTTPException, Query, Body, Depends, Header, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +66,65 @@ app.add_middleware(
 )
 
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+
+# ==========================================
+# 後台資安防護：HMAC 權杖簽章與防暴力破解
+# ==========================================
+SECRET_KEY = os.environ.get("SECRET_KEY", "").strip() or secrets.token_hex(32)
+TOKEN_TTL_SECONDS = 8 * 3600  # 8 小時過期
+
+# 記錄各 IP 連續錯誤次數與鎖定到期時間: ip -> {"fails": int, "locked_until": float}
+_LOGIN_ATTEMPTS: Dict[str, Dict[str, float]] = {}
+MAX_LOGIN_FAILS = 5
+LOCKOUT_SECONDS = 600  # 輸錯 5 次鎖定 10 分鐘
+
+
+def get_admin_pin() -> str:
+    """
+    優先讀取環境變數 ADMIN_PIN，其次讀取資料庫 system_settings 裡的 admin_pin，
+    若皆未設定才使用本機開發初始預設值。
+    """
+    env_pin = os.environ.get("ADMIN_PIN", "").strip()
+    if env_pin:
+        return env_pin
+    db_pin = get_setting("admin_pin", "").strip()
+    if db_pin:
+        return db_pin
+    return "66776677"
+
+
+def create_admin_token() -> str:
+    exp = int(time.time()) + TOKEN_TTL_SECONDS
+    nonce = secrets.token_hex(8)
+    payload = f"{exp}.{nonce}"
+    sig = hmac.new(SECRET_KEY.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def verify_admin_token(token: str) -> bool:
+    if not token or token.count(".") != 2:
+        return False
+    try:
+        exp_str, nonce, sig = token.split(".")
+        exp = int(exp_str)
+        if time.time() > exp:
+            return False
+        payload = f"{exp_str}.{nonce}"
+        expected_sig = hmac.new(SECRET_KEY.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected_sig)
+    except Exception:
+        return False
+
+
+def require_admin(authorization: Optional[str] = Header(None)):
+    """FastAPI Dependency：強制保護所有 /api/admin/* 路由"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未登入或權杖遺失，請重新登入庶務股長後台！")
+    token = authorization[len("Bearer "):].strip()
+    if not verify_admin_token(token):
+        raise HTTPException(status_code=401, detail="後台登入時效已過期或無效，請重新輸入密碼登入！")
+    return True
+
 
 @app.on_event("startup")
 def startup_event():
@@ -250,7 +313,7 @@ def get_current_week_schedule(week_start: Optional[str] = None):
         JOIN restaurants r ON ws.restaurant_id = r.id
         LEFT JOIN feedbacks f ON r.id = f.restaurant_id
         WHERE ws.week_start_date = ?
-        GROUP BY ws.day_of_week, r.id
+        GROUP BY ws.day_of_week, ws.is_manual_override, ws.notes, r.id
         ORDER BY ws.day_of_week ASC
     """, (monday_str,))
     rows = cursor.fetchall()
@@ -493,13 +556,14 @@ def get_today_orders(date: Optional[str] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 1. 訂單原始清單 (依座號排序)
+    # 1. 訂單原始清單
     cursor.execute("""
         SELECT * FROM orders
         WHERE order_date = ?
-        ORDER BY CAST(seat_number AS INTEGER) ASC, id ASC
+        ORDER BY id ASC
     """, (date,))
     all_orders = [dict(row) for row in cursor.fetchall()]
+    all_orders.sort(key=lambda o: (int(o["seat_number"]) if str(o["seat_number"]).isdigit() else 999, o["id"]))
 
     # 2. 彙整各菜色總數量 (方便電話叫餐)
     cursor.execute("""
@@ -554,7 +618,7 @@ def get_today_orders(date: Optional[str] = None):
 
 
 @app.patch("/api/admin/orders/student-payment")
-def toggle_student_payment(payload: Dict[str, Any] = Body(...)):
+def toggle_student_payment(payload: Dict[str, Any] = Body(...), _: bool = Depends(require_admin)):
     """一鍵切換該同學所有項目的繳費狀態"""
     seat_number = payload.get("seat_number")
     date = payload.get("order_date")
@@ -591,11 +655,11 @@ def submit_feedback(fb: FeedbackCreate):
 
 
 # ==========================================
-# 庶務股長後台管理 API
+# 庶務股長後台管理 API (全數受 require_admin 保護)
 # ==========================================
 
 @app.post("/api/admin/schedule/auto-plan")
-def auto_plan_schedule(payload: Optional[Dict[str, Any]] = Body(None)):
+def auto_plan_schedule(payload: Optional[Dict[str, Any]] = Body(None), _: bool = Depends(require_admin)):
     """一鍵智慧自動排餐，支援指定排餐週並參考前週五類型避免重複"""
     week_start_date = payload.get("week_start_date") if payload else None
 
@@ -629,7 +693,7 @@ def auto_plan_schedule(payload: Optional[Dict[str, Any]] = Body(None)):
 
 
 @app.post("/api/admin/schedule/validate")
-def validate_schedule_endpoint(payload: Dict[str, Any] = Body(...)):
+def validate_schedule_endpoint(payload: Dict[str, Any] = Body(...), _: bool = Depends(require_admin)):
     """檢驗排程約束（含每週同店不重複、同類型不連續、店家公休日避開）"""
     days = payload.get("days", [])
 
@@ -645,7 +709,7 @@ def validate_schedule_endpoint(payload: Dict[str, Any] = Body(...)):
 
 
 @app.post("/api/admin/schedule/save")
-def save_weekly_schedule(req: WeeklyScheduleSaveRequest):
+def save_weekly_schedule(req: WeeklyScheduleSaveRequest, _: bool = Depends(require_admin)):
     """庶務股長儲存每週排餐設定"""
     conn = get_db_connection()
     c = conn.cursor()
@@ -678,7 +742,7 @@ def save_weekly_schedule(req: WeeklyScheduleSaveRequest):
 
 
 @app.get("/api/admin/restaurants")
-def get_all_restaurants():
+def get_all_restaurants(_: bool = Depends(require_admin)):
     """取得所有餐廳名單與菜單、平均評分、實體菜單圖"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -719,7 +783,7 @@ def get_all_restaurants():
 
 
 @app.post("/api/admin/restaurants")
-def create_restaurant(rest: RestaurantCreate):
+def create_restaurant(rest: RestaurantCreate, _: bool = Depends(require_admin)):
     """新增餐廳與其菜單"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -739,13 +803,13 @@ def create_restaurant(rest: RestaurantCreate):
         conn.commit()
         conn.close()
         return {"success": True, "restaurant_id": rest_id, "message": f"成功新增餐廳【{rest.name}】！"}
-    except sqlite3.IntegrityError:
+    except Exception:
         conn.close()
         raise HTTPException(status_code=400, detail=f"已存在同名餐廳【{rest.name}】！")
 
 
 @app.put("/api/admin/restaurants/{rest_id}")
-def update_restaurant(rest_id: int, rest: RestaurantBase):
+def update_restaurant(rest_id: int, rest: RestaurantBase, _: bool = Depends(require_admin)):
     """更新餐廳基本資料（含公休日設定、電話、菜單備註、實體菜單圖等）"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -770,7 +834,7 @@ def update_restaurant(rest_id: int, rest: RestaurantBase):
 
 
 @app.delete("/api/admin/restaurants/{rest_id}")
-def delete_restaurant(rest_id: int):
+def delete_restaurant(rest_id: int, _: bool = Depends(require_admin)):
     """刪除餐廳"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -781,7 +845,7 @@ def delete_restaurant(rest_id: int):
 
 
 @app.post("/api/admin/restaurants/{rest_id}/menu")
-def add_menu_item(rest_id: int, item: MenuItemCreate):
+def add_menu_item(rest_id: int, item: MenuItemCreate, _: bool = Depends(require_admin)):
     """為餐廳追加菜品"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -796,7 +860,7 @@ def add_menu_item(rest_id: int, item: MenuItemCreate):
 
 
 @app.delete("/api/admin/menu/{item_id}")
-def delete_menu_item(item_id: int):
+def delete_menu_item(item_id: int, _: bool = Depends(require_admin)):
     """刪除菜單項目"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -807,7 +871,7 @@ def delete_menu_item(item_id: int):
 
 
 @app.patch("/api/admin/orders/{order_id}/payment")
-def toggle_payment(order_id: int, payload: Dict[str, Any] = Body(...)):
+def toggle_payment(order_id: int, payload: Dict[str, Any] = Body(...), _: bool = Depends(require_admin)):
     """切換單筆訂單收費狀態"""
     is_paid = 1 if payload.get("is_paid") else 0
     conn = get_db_connection()
@@ -819,7 +883,7 @@ def toggle_payment(order_id: int, payload: Dict[str, Any] = Body(...)):
 
 
 @app.post("/api/admin/orders/batch-payment")
-def batch_payment(payload: Dict[str, Any] = Body(...)):
+def batch_payment(payload: Dict[str, Any] = Body(...), _: bool = Depends(require_admin)):
     """批次將指定日期的訂單全部設為已收費或未收費"""
     date = payload.get("date")
     is_paid = 1 if payload.get("is_paid") else 0
@@ -835,7 +899,7 @@ def batch_payment(payload: Dict[str, Any] = Body(...)):
 
 
 @app.delete("/api/admin/orders/{order_id}")
-def delete_order(order_id: int):
+def delete_order(order_id: int, _: bool = Depends(require_admin)):
     """刪除訂單"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -846,7 +910,7 @@ def delete_order(order_id: int):
 
 
 @app.get("/api/admin/feedbacks")
-def get_feedbacks():
+def get_feedbacks(_: bool = Depends(require_admin)):
     """查詢同學評價與回饋清單"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -861,20 +925,51 @@ def get_feedbacks():
     return feedbacks
 
 
-ADMIN_PIN = "66776677"
-
-
 @app.post("/api/admin/verify-pin")
-def verify_admin_pin(payload: Dict[str, Any] = Body(...)):
-    """驗證庶務股長後台密碼"""
+def verify_admin_pin(request: Request, payload: Dict[str, Any] = Body(...)):
+    """驗證庶務股長後台密碼（含防暴力破解與 HMAC 簽章權杖核發）"""
+    client_ip = request.client.host if request.client else "unknown"
+    now_ts = time.time()
+
+    attempt_info = _LOGIN_ATTEMPTS.get(client_ip, {"fails": 0, "locked_until": 0.0})
+    if attempt_info["locked_until"] > now_ts:
+        remain_min = max(1, int((attempt_info["locked_until"] - now_ts + 59) // 60))
+        raise HTTPException(
+            status_code=429,
+            detail=f"密碼連續輸入錯誤次數過多，系統已暫時鎖定！請於 {remain_min} 分鐘後再試。"
+        )
+
     pin = str(payload.get("pin", "")).strip()
-    if pin == ADMIN_PIN:
-        return {"success": True, "message": "密碼驗證成功，歡迎進入後台"}
-    raise HTTPException(status_code=401, detail="密碼錯誤！請輸入正確的庶務股長通行密碼。")
+    expected_pin = get_admin_pin()
+
+    if pin and hmac.compare_digest(pin.encode("utf-8"), expected_pin.encode("utf-8")):
+        _LOGIN_ATTEMPTS.pop(client_ip, None)
+        token = create_admin_token()
+        return {
+            "success": True,
+            "token": token,
+            "expires_in": TOKEN_TTL_SECONDS,
+            "message": "密碼驗證成功，歡迎進入後台"
+        }
+
+    fails = int(attempt_info.get("fails", 0)) + 1
+    if fails >= MAX_LOGIN_FAILS:
+        _LOGIN_ATTEMPTS[client_ip] = {"fails": fails, "locked_until": now_ts + LOCKOUT_SECONDS}
+        raise HTTPException(
+            status_code=429,
+            detail="密碼連續錯誤達 5 次，已鎖定 10 分鐘！"
+        )
+    else:
+        _LOGIN_ATTEMPTS[client_ip] = {"fails": fails, "locked_until": 0.0}
+        left = MAX_LOGIN_FAILS - fails
+        raise HTTPException(
+            status_code=401,
+            detail=f"密碼錯誤！您還有 {left} 次嘗試機會。"
+        )
 
 
 @app.get("/api/admin/settings")
-def get_settings():
+def get_settings(_: bool = Depends(require_admin)):
     """取得系統環境設定與 Discord Webhook 配置"""
     test_mode = get_setting("test_mode", "true") == "true"
     simulated_time = get_setting("simulated_time", "")
@@ -890,8 +985,8 @@ def get_settings():
 
 
 @app.post("/api/admin/settings")
-def update_settings(payload: Dict[str, Any] = Body(...)):
-    """更新測試模式、模擬時間與 Discord Webhook"""
+def update_settings(payload: Dict[str, Any] = Body(...), _: bool = Depends(require_admin)):
+    """更新測試模式、模擬時間、Discord Webhook 或管理員密碼"""
     if "test_mode" in payload:
         set_setting("test_mode", "true" if payload["test_mode"] else "false")
     if "simulated_time" in payload:
@@ -900,11 +995,16 @@ def update_settings(payload: Dict[str, Any] = Body(...)):
         set_setting("discord_webhook_url", payload["discord_webhook_url"].strip())
     if "discord_enabled" in payload:
         set_setting("discord_enabled", "true" if payload["discord_enabled"] else "false")
+    if "new_admin_pin" in payload and str(payload["new_admin_pin"]).strip():
+        new_pin = str(payload["new_admin_pin"]).strip()
+        if len(new_pin) < 6:
+            raise HTTPException(status_code=400, detail="新密碼長度請至少設定 6 碼以上！")
+        set_setting("admin_pin", new_pin)
     return {"success": True, "message": "設定已更新"}
 
 
 @app.post("/api/admin/discord/test")
-def test_discord_webhook(payload: Dict[str, Any] = Body(...)):
+def test_discord_webhook(payload: Dict[str, Any] = Body(...), _: bool = Depends(require_admin)):
     """測試發送 Discord 班群點餐提醒 Webhook"""
     import urllib.request
     import json

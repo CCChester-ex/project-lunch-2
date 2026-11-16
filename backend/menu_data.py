@@ -1190,8 +1190,15 @@ REAL_MENUS = [
 ]
 
 
-def ensure_variant_column(conn: sqlite3.Connection):
+def ensure_variant_column(conn):
     cur = conn.cursor()
+    # 判斷是否為 PostgreSQL 連線包裝器
+    if conn.__class__.__name__ == "PostgresConnectionWrapper":
+        cur.execute("ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS variant TEXT DEFAULT ''")
+        cur.execute("ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS closed_days TEXT DEFAULT ''")
+        conn.commit()
+        return
+
     cols = [r[1] for r in cur.execute("PRAGMA table_info(menu_items)").fetchall()]
     if "variant" not in cols:
         cur.execute("ALTER TABLE menu_items ADD COLUMN variant TEXT DEFAULT ''")
